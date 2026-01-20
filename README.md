@@ -57,7 +57,6 @@ This project was built as part of a **MERN Fullstack Developer Assessment** and 
    ```bash
    http://localhost:5000
 
-
 ## Frontend Setup
 
 1. Navigate to the frontend directory
