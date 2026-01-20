@@ -2,142 +2,170 @@ import dayjs from 'dayjs';
 
 // Parse WhatsApp Chat and Export Analytics
 export function parseWhatsAppChat(text) {
-    const lines = text.split('\n');
+  const lines = text.split('\n');
 
-    // For day-wise stats
-    const dailyStats = {};
+  // Last 7 days stats
+  const last7DayStats = {};
 
-    //Show which days each user was active
-    const userActiveDays = new Map();
+  // Global daily stats
+  const globalDailyStats = {};
 
-    //Calculate last 7 days
-    // First pass: find latest date in the chat
-let latestDate = null;
+  // Track active days per user (LAST 7 DAYS ONLY)
+  const userActiveDays = new Map();
 
-for (const line of lines) {
-  if (!line.includes(' - ')) continue;
+  /* ---------------- FIND LATEST DATE ---------------- */
 
-  const datePart = line.split(' - ')[0];
-  const dateStr = datePart.split(',')[0];
-  const parsed = dayjs(dateStr, ['M/D/YY', 'M/D/YYYY']);
+  let latestDate = null;
 
-  if (parsed.isValid()) {
-    if (!latestDate || parsed.isAfter(latestDate)) {
-      latestDate = parsed;
+  for (const line of lines) {
+    if (!line.includes(' - ')) continue;
+
+    const dateTimePart = line.split(' - ')[0];
+    const parsed = dayjs(dateTimePart, [
+      'M/D/YY, h:mm A',
+      'M/D/YYYY, h:mm A'
+    ]);
+
+    if (parsed.isValid()) {
+      if (!latestDate || parsed.isAfter(latestDate)) {
+        latestDate = parsed;
+      }
     }
   }
-}
 
-// If no valid dates found, return empty result
-if (!latestDate) {
-  return { last7Days: [], frequentUsers: [] };
-}
+  if (!latestDate) {
+    return { last7Days: [], frequentUsers: [], dailyStats: {} };
+  }
 
-// Build last 7 days based on latest date in chat
-const last7Days = new Set();
-for (let i = 0; i < 7; i++) {
-  last7Days.add(
-    latestDate.subtract(i, 'day').format('YYYY-MM-DD')
-  );
-}
+  /* ---------------- BUILD LAST 7 DAYS ---------------- */
 
-    for (const line of lines) {
-        if (!line.includes(' - ')) continue;
+  const last7Days = new Set();
+  for (let i = 0; i < 7; i++) {
+    last7Days.add(
+      latestDate.clone().subtract(i, 'day').format('YYYY-MM-DD')
+    );
+  }
 
-        //Split Line into DateTime and Content
-        const parts = line.split(' - ');
-        if (parts.length !== 2) continue;
+  /* ---------------- MAIN PARSING LOOP ---------------- */
 
-        const dateTimePart = parts[0];
-        const content = parts[1];
+  for (const line of lines) {
+    if (!line.includes(' - ')) continue;
 
-        //Extract Date
-        const date = extractDate(dateTimePart);
-        if (!date || !last7Days.has(date)) continue;
+    const parts = line.split(' - ');
+    if (parts.length !== 2) continue;
 
-        //Initialize Stats For The Day
-        if (!dailyStats[date]) {
-          dailyStats[date] = {
-          activeUsers: new Set(),
-          newUsers: new Set()
-        };
-      }
+    const dateTimePart = parts[0];
+    const content = parts[1];
 
-      //Join Event
-      if (isJoinEvent(content)) {
-        const joinedUser = extractJoinedUser(content);
-        if (joinedUser) {
-            dailyStats[date].newUsers.add(joinedUser);
+    const date = extractDate(dateTimePart);
+    if (!date) continue;
+
+    /* ---- Initialize GLOBAL stats ---- */
+    if (!globalDailyStats[date]) {
+      globalDailyStats[date] = {
+        activeUsers: new Set(),
+        newUsers: new Set()
+      };
+    }
+
+    /* ---- Initialize LAST 7 DAYS stats ---- */
+    if (last7Days.has(date) && !last7DayStats[date]) {
+      last7DayStats[date] = {
+        activeUsers: new Set(),
+        newUsers: new Set()
+      };
+    }
+
+    /* ---- JOIN EVENT ---- */
+    if (isJoinEvent(content)) {
+      const joinedUser = extractJoinedUser(content);
+      if (joinedUser) {
+        globalDailyStats[date].newUsers.add(joinedUser);
+
+        if (last7Days.has(date)) {
+          last7DayStats[date].newUsers.add(joinedUser);
         }
-        continue;
       }
+      continue;
+    }
 
-      //Message Event
-      if (isMessage(content)) {
-        const sender = extractSender(content);
+    /* ---- MESSAGE EVENT ---- */
+    if (isMessage(content)) {
+      const sender = extractSender(content);
 
-        dailyStats[date].activeUsers.add(sender);
+      globalDailyStats[date].activeUsers.add(sender);
 
+      if (last7Days.has(date)) {
+        last7DayStats[date].activeUsers.add(sender);
+
+        // ✅ FIX: Track active days ONLY for last 7 days
         if (!userActiveDays.has(sender)) {
-            userActiveDays.set(sender, new Set());
+          userActiveDays.set(sender, new Set());
         }
         userActiveDays.get(sender).add(date);
       }
     }
+  }
 
-    const last7DaysData = [...last7Days].sort().map(date => ({
-        date,
-        activeUsers: dailyStats[date]?.activeUsers.size || 0,
-        newUsers: dailyStats[date]?.newUsers.size || 0
+  /* ---------------- RESPONSE BUILDING ---------------- */
+
+  const last7DaysData = [...last7Days].sort().map(date => ({
+    date,
+    activeUsers: last7DayStats[date]?.activeUsers.size || 0,
+    newUsers: last7DayStats[date]?.newUsers.size || 0
+  }));
+
+  const frequentUsers = [...userActiveDays.entries()]
+    .filter(([_, days]) => days.size >= 4)
+    .map(([user, days]) => ({
+      user,
+      activeDays: days.size
     }));
 
-    const frequentUsers = [...userActiveDays.entries()]
-        .filter(([_, days]) => days.size >= 4)
-        .map(([user, days]) => ({
-            user,
-            activeDays: days.size
-        }));
+  const dailyStatsResponse = {};
+  for (const date in globalDailyStats) {
+    dailyStatsResponse[date] = {
+      activeUsers: globalDailyStats[date].activeUsers.size,
+      newUsers: globalDailyStats[date].newUsers.size
+    };
+  }
 
-    return {
-       last7Days: last7DaysData,
-       frequentUsers
-   };
+  return {
+    last7Days: last7DaysData,
+    frequentUsers,
+    dailyStats: dailyStatsResponse
+  };
 }
 
-/********* HELPER FUNCTIONS **********/
+/* ---------------- HELPER FUNCTIONS ---------------- */
 
 function extractDate(dateTimePart) {
-    const datePart = dateTimePart.split(',')[0];
-    const parsed = dayjs(datePart, ['M/D/YY', 'M/D/YYYY']);
-    return parsed.isValid() ? parsed.format('YYYY-MM-DD') : null;
+  const parsed = dayjs(dateTimePart, [
+    'M/D/YY, h:mm A',
+    'M/D/YYYY, h:mm A'
+  ]);
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : null;
 }
 
 function isJoinEvent(content) {
-    // Join Event Never has ":"
-    if (content.includes(":")) return false;
-
-    return content.includes(' joined') || content.includes(' added');
+  if (content.includes(':')) return false;
+  return content.includes(' joined') || content.includes(' added');
 }
 
 function extractJoinedUser(content) {
-    // "+91 23 73889 joined using this group's invite link"
-    // "+91 16 91994 added you"
-
-    if (content.includes(' joined')) {
-        return content.split(' joined')[0].trim();
-    }
-
-    if (content.includes(' added')) {
-        return content.split(' added')[0].trim();
-    }
-
-    return null;
+  if (content.includes(' joined')) {
+    return content.split(' joined')[0].trim();
+  }
+  if (content.includes(' added')) {
+    return content.split(' added')[0].trim();
+  }
+  return null;
 }
 
 function isMessage(content) {
-    return content.includes(':');
+  return content.includes(':');
 }
 
 function extractSender(content) {
-    return content.split(':')[0].trim();
+  return content.split(':')[0].trim();
 }

@@ -11,6 +11,8 @@ This project was built as part of a **MERN Fullstack Developer Assessment** and 
     - **Number of active users per day**
     - **Number of new users per day**
     - **Users active for at least 4 days in the last 7 days**
+    - **Cumulative Growth Chart over the complete period**
+    - **Engagement Ratio over the complete period**
 - Visualize day-wise activity using a bar chart
 - Minimal React frontend (Without any CSS frameworks)
 

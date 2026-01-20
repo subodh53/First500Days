@@ -34,5 +34,10 @@ export default function ChatChart({ data }) {
             }
         ]
     };
-    return <Bar data={chartData}/>; 
+    return (
+        <>
+            <h2>Active Users and New Users Over Last 7 Days</h2>
+            <Bar data={chartData}/>;
+        </>
+    )  
 }
