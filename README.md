@@ -76,3 +76,11 @@ This project was built as part of a **MERN Fullstack Developer Assessment** and 
 4. The frontend will be running at
    ```bash
    http://localhost:5173
+
+---
+
+## How to Use The Application
+
+- Run both frontend and backend
+- Upload the exported group chat in `txt` format
+- Click Analyze
