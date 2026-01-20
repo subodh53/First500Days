@@ -1,4 +1,4 @@
-# First500Days
+# First500Days MERN Fullstack Developer Assessment
 
 A minimal full-stack application that analyzes exported WhatsApp group chat and provides insights.
 
